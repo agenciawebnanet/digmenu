@@ -1,0 +1,6 @@
+{
+  "name": "DigMenu",
+  "description": "Cardápios digitais multiempresa com QR Code, pedidos no WhatsApp e assinatura recorrente para restaurantes brasileiros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
