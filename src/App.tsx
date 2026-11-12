@@ -97,7 +97,7 @@ export default function App() {
   // Route matching
   if (pathname.startsWith('/m/')) {
     const slug = pathname.slice(3).split('/')[0];
-    return <PublicMenuPage slug={slug} onNavigate={navigate} />;
+    return <PublicMenuPage key={slug} slug={slug} onNavigate={navigate} />;
   }
 
   if (pathname === '/termos' || pathname === '/privacidade' || pathname === '/suporte') {

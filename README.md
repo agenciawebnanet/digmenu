@@ -53,3 +53,15 @@ npm run build
 
 - **Forno Napolitano** (`/m/forno-napolitano`): `marco@fornonapolitano.demo` / `demo1234`
 - **Praça Smash Burger** (`/m/praca-smash`): `lucas@pracasmash.demo` / `demo1234`
+
+
+## Prévia completa para validar o cadastro
+
+Use Node.js 24 ou superior. Para servir o build pelo Express com as rotas de página e de API no mesmo endereço:
+
+```bash
+npm run build
+NODE_ENV=production DATABASE_PATH=./data/digmenu_onboarding_preview.db npm start
+```
+
+Abra o aplicativo em HTTPS ao usar esse modo em hospedagem, pois o cookie de sessão é seguro. O modo de desenvolvimento usa HTTP local. O servidor precisa de armazenamento persistente gravável para o banco SQLite. Publicar somente a pasta `dist` deixa as rotas de API indisponíveis. Para uma futura publicação na Vercel com funções, conecte o backend a um banco persistente, separado da produção durante a validação.

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseArgs } from 'node:util';
 import express, { type Express } from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
@@ -127,8 +128,8 @@ export function createApiApp(): Express {
   app.get('/api/public/demo-stores', (_req, res) => {
     const db = getDb();
     const stores = db
-      .prepare('SELECT * FROM stores ORDER BY created_at ASC LIMIT 6')
-      .all() as Array<Record<string, any>>;
+      .prepare('SELECT * FROM stores WHERE slug IN (?, ?) ORDER BY created_at ASC')
+      .all('forno-napolitano', 'praca-smash') as Array<Record<string, any>>;
 
     const items = stores.map((store) => {
       const opStatus = buildOperationalStatusForStore(store);
@@ -233,8 +234,8 @@ export function createApiApp(): Express {
           '',
           '',
           waCheck.normalized,
-          (pickupAddress || 'Endereço a configurar nas configurações da loja').trim(),
-          (city || 'Brasil').trim(),
+          (pickupAddress || '').trim(),
+          (city || '').trim(),
           'America/Sao_Paulo',
           1,
           1,
@@ -1556,7 +1557,8 @@ export function createApiApp(): Express {
 async function startServer() {
   const app = createApiApp();
   const isProduction = process.env.NODE_ENV === 'production';
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const { values } = parseArgs({ options: { port: { type: 'string' }, host: { type: 'string' }, strictPort: { type: 'boolean' } } });
+  const port = Number(values.port ?? process.env.PORT ?? 3000);
 
   if (!isProduction) {
     const vite = await createViteServer({
@@ -1566,13 +1568,14 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
+    app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota da API não encontrada.' }));
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 
-  app.listen(port, '0.0.0.0', () => {
+  app.listen(port, values.host ?? '0.0.0.0', () => {
     console.log(`DigMenu SaaS rodando em http://localhost:${port}`);
   });
 }
