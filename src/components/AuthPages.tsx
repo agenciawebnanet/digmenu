@@ -20,13 +20,10 @@ function toSlugPreview(val: string): string {
 }
 
 export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSuccess }) => {
-  const [userName, setUserName] = useState('');
   const [storeName, setStoreName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [whatsapp, setWhatsapp] = useState('');
-  const [pickupAddress, setPickupAddress] = useState('');
-  const [city, setCity] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -50,18 +47,15 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
         const res = await apiRequest<{ user: AuthUser; stores: StoreSummary[] }>('/api/auth/register', {
           method: 'POST',
           body: JSON.stringify({
-            userName: userName.trim() || storeName.trim(),
             storeName: storeName.trim(),
             slug: slug.trim(),
             whatsapp: whatsapp.trim(),
-            pickupAddress: pickupAddress.trim(),
-            city: city.trim(),
             email: email.trim(),
             password,
           }),
         });
         onAuthSuccess(res.user, res.stores);
-        onNavigate('/painel');
+        onNavigate('/painel/cardapio');
       } else {
         const res = await apiRequest<{ user: AuthUser; stores: StoreSummary[] }>('/api/auth/login', {
           method: 'POST',
@@ -111,7 +105,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
             </h1>
             <p className="text-sm text-slate-600">
               {mode === 'register'
-                ? 'Acesso à demonstração em ambiente de prévia isolado. Nenhuma cobrança real será feita.'
+                ? 'Crie sua loja e adicione o primeiro produto. Nesta prévia, você pode testar sem cobrança.'
                 : 'Acesse sua loja para gerenciar cardápio, pedidos, configurações e assinatura anual.'}
             </p>
           </div>
@@ -130,12 +124,13 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
             {mode === 'register' && (
               <>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  <label htmlFor="storeName" className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Nome do restaurante *
                   </label>
                   <input
                     type="text"
                     required
+                    id="storeName" name="storeName" autoComplete="organization"
                     value={storeName}
                     onChange={(e) => handleStoreNameChange(e.target.value)}
                     placeholder="Ex: Cantina Vila Mariana"
@@ -144,7 +139,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  <label htmlFor="slug" className="block text-xs font-semibold text-slate-700 mb-1.5">
                     Endereço público do cardápio *
                   </label>
                   <div className="flex items-center rounded-xl border border-slate-300 focus-within:ring-2 focus-within:ring-orange-600 overflow-hidden bg-white">
@@ -154,7 +149,8 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
                     <input
                       type="text"
                       required
-                      value={slug}
+                      id="slug" name="slug" autoCapitalize="none" spellCheck={false}
+                    value={slug}
                       onChange={(e) => {
                         setSlugManuallyEdited(true);
                         setSlug(toSlugPreview(e.target.value));
@@ -166,72 +162,35 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  <label htmlFor="whatsapp" className="block text-xs font-semibold text-slate-700 mb-1.5">
                     WhatsApp com DDD *
                   </label>
                   <input
                     type="tel"
                     required
+                    id="whatsapp" name="whatsapp" autoComplete="tel"
                     value={whatsapp}
                     onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="(11) 99988-7766"
                     className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Será normalizado para o formato internacional brasileiro (+55).
+                    É nesse número que você recebe os pedidos.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      Seu nome
-                    </label>
-                    <input
-                      type="text"
-                      value={userName}
-                      onChange={(e) => setUserName(e.target.value)}
-                      placeholder="Nome completo"
-                      className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                      Cidade / UF
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Ex: São Paulo - SP"
-                      className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Endereço de retirada
-                  </label>
-                  <input
-                    type="text"
-                    value={pickupAddress}
-                    onChange={(e) => setPickupAddress(e.target.value)}
-                    placeholder="Rua, número e bairro para retirada no balcão"
-                    className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
-                  />
-                </div>
               </>
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1.5">
                 E-mail *
               </label>
               <input
                 type="email"
                 required
-                value={email}
+                id="email" name="email" autoComplete="email"
+                    value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="voce@restaurante.com.br"
                 className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
@@ -239,14 +198,15 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Senha *
               </label>
               <input
                 type="password"
                 required
                 minLength={6}
-                value={password}
+                id="password" name="password" autoComplete={mode === "register" ? "new-password" : "current-password"}
+                    value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mínimo 6 caracteres"
                 className="w-full min-h-[44px] px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
@@ -261,7 +221,7 @@ export const AuthPages: React.FC<AuthPagesProps> = ({ mode, onNavigate, onAuthSu
               {loading
                 ? 'Processando...'
                 : mode === 'register'
-                ? 'Criar loja de demonstração'
+                ? 'Criar loja e adicionar produtos'
                 : 'Entrar no painel'}
             </button>
           </form>

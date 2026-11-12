@@ -179,14 +179,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7 space-y-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-orange-700">
-              Prévia isolada · Cardápio digital multiempresa
+              Cardápio digital para restaurantes
             </p>
             <h1 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 text-balance leading-[1.12]">
-              Cardápio digital com link próprio e pedidos organizados no WhatsApp.
+              Seu restaurante com cardápio online e pedidos pelo WhatsApp.
             </h1>
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
-              O DigMenu centraliza o catálogo do seu restaurante, calcula taxas de entrega por bairro,
-              respeita horários de funcionamento e envia cada pedido conferido no servidor diretamente para o WhatsApp da loja.
+              Cadastre seus pratos, compartilhe seu link no Instagram, no Facebook e no WhatsApp e receba os pedidos no número da sua loja.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -204,6 +203,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Ver cardápios de exemplo
               </a>
             </div>
+            <p className="text-sm text-slate-600">Assinatura anual com renovação a cada 12 meses. Prévia sem cobrança.</p>
           </div>
 
           <div className="lg:col-span-5">
@@ -214,12 +214,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 className="w-full h-56 sm:h-64 object-cover"
               />
               <div className="p-5 space-y-2 bg-white">
-                <p className="text-xs font-semibold text-slate-500">Fluxo operacional completo</p>
+                <p className="text-xs font-semibold text-slate-500">Do cadastro ao primeiro cardápio</p>
                 <p className="text-sm font-bold text-slate-900">
-                  Cadastro da loja → Produtos e bairros → Link público /m/sua-loja → Pedido no WhatsApp
+                  Crie sua loja, adicione os pratos e compartilhe o cardápio.
                 </p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Todos os valores e disponibilidade são conferidos no servidor antes de gerar a mensagem para o WhatsApp.
+                  O cliente escolhe o que quer e abre o WhatsApp com o pedido pronto.
                 </p>
               </div>
             </div>
@@ -293,6 +293,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
           </div>
 
+          {demoStores.length === 0 && (
+            <p role="status" className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Se os cardápios de exemplo não aparecerem, tente recarregar a página.</p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {demoStores.map((store) => (
               <div

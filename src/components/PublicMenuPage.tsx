@@ -343,7 +343,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
   const op = store.operationalStatus;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f9f5ee] text-slate-900 pb-24 overflow-x-hidden">
       {/* Compact Store Top Bar */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-3 sm:px-5 h-14 flex items-center justify-between gap-2">
@@ -372,17 +372,19 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
 
       <main className="max-w-3xl mx-auto px-3 sm:px-5 pt-4 space-y-5">
         {/* Store Identity Card */}
-        <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          {store.coverUrl && (
-            <div className="h-36 sm:h-48 bg-slate-200">
+        <section className="bg-white border border-orange-100 rounded-3xl overflow-hidden shadow-sm">
+          {store.coverUrl ? (
+            <div className="h-44 sm:h-64 bg-slate-200">
               <img
                 src={store.coverUrl}
                 alt={store.name}
                 className="w-full h-full object-cover"
               />
             </div>
+          ) : (
+            <div aria-hidden="true" className="h-24 sm:h-32 bg-gradient-to-br from-orange-800 via-orange-600 to-amber-400" />
           )}
-          <div className="p-4 sm:p-5 space-y-3">
+          <div className="p-5 sm:p-6 space-y-3">
             <div className="flex items-start gap-3">
               {store.logoUrl ? (
                 <img
@@ -396,7 +398,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <h1 className="font-display text-lg sm:text-xl font-bold text-slate-900 leading-snug">
+                <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 leading-snug break-words">
                   {store.name}
                 </h1>
                 {store.description && (
@@ -411,7 +413,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
               <div className="flex items-center gap-1.5 min-w-0">
                 <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span className="truncate">
-                  {store.pickupAddress} {store.city ? `· ${store.city}` : ''}
+                  {[store.pickupAddress, store.city].filter(Boolean).join(' · ')}
                 </span>
               </div>
               <button
@@ -486,7 +488,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
         <section className="space-y-3">
           {filteredProducts.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-500">
-              Nenhum produto disponível encontrado para sua busca.
+              {menuData?.products.length ? "Nenhum produto encontrado para sua busca." : "Este cardápio ainda está sendo preparado."}
             </div>
           ) : (
             filteredProducts.map((product) => {

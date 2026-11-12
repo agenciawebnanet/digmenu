@@ -248,6 +248,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 // ============================================================================
 interface MenuTabProps {
   storeId: string;
+  slug: string;
   categories: Category[];
   products: Product[];
   onRefresh: () => Promise<void>;
@@ -259,7 +260,7 @@ const DEMO_PHOTO_PRESETS = [
   { label: 'Smash Burger', url: '/images/dish_smash_burger.jpg' },
 ];
 
-export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products, onRefresh }) => {
+export const MenuTab: React.FC<MenuTabProps> = ({ storeId, slug, categories, products, onRefresh }) => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [catSaving, setCatSaving] = useState(false);
 
@@ -403,7 +404,7 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
         <div>
           <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900">Cardápio e produtos</h2>
           <p className="text-xs sm:text-sm text-slate-600">
-            Produtos ocultos ficam fora do cardápio público. Pedidos anteriores preservam os preços registrados.
+            {products.length ? 'Organize os produtos e escolha quais aparecem no cardápio.' : 'Adicione um prato com nome, preço e foto para começar seu cardápio.'}
           </p>
         </div>
         <button
@@ -412,7 +413,7 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
           className="min-h-[44px] px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-xl inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Novo produto</span>
+          <span>{products.length ? "Novo produto" : "Adicionar primeiro produto"}</span>
         </button>
       </div>
 
@@ -421,6 +422,17 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
           <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
           <span>{errorMsg}</span>
         </div>
+      )}
+
+      {products.some((product) => product.is_available) && (
+        <a
+          href={`/m/${slug}`}
+          target="_blank"
+          rel="noopener"
+          className="inline-flex min-h-[44px] items-center rounded-xl border border-orange-200 bg-orange-50 px-4 text-sm font-semibold text-orange-800"
+        >
+          Abrir meu cardápio público ↗
+        </a>
       )}
 
       {/* Nova categoria */}

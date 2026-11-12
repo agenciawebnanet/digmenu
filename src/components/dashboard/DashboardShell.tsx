@@ -283,6 +283,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
             {currentPath === '/painel/cardapio' && (
               <MenuTab
                 storeId={overview.store.id}
+                slug={store.slug}
                 categories={overview.categories}
                 products={overview.products}
                 onRefresh={loadOverview}
