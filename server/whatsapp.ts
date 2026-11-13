@@ -78,13 +78,17 @@ export interface WhatsAppOrderMessageInput {
   storeName: string;
   orderNumber: number;
   customerName: string;
-  fulfillmentType: 'delivery' | 'pickup';
+  fulfillmentType: 'delivery' | 'pickup' | 'table' | 'counter';
+  tableLabel?: string | null;
   items: Array<{
     quantity: number;
     productName: string;
+    sizeName?: string | null;
+    addonNames?: string[];
     lineTotalCents: number;
   }>;
   neighborhoodName?: string | null;
+  subtotalCents?: number;
   deliveryFeeCents: number;
   deliveryAddress?: string | null;
   pickupAddress?: string | null;
@@ -99,7 +103,16 @@ export function buildWhatsAppOrderMessage(input: WhatsAppOrderMessageInput): str
   ];
 
   for (const item of input.items) {
-    lines.push(`• ${item.quantity}× ${item.productName} — ${formatCentsBRL(item.lineTotalCents)}`);
+    const sizePart = item.sizeName ? ` (${item.sizeName})` : '';
+    const addonsPart =
+      item.addonNames && item.addonNames.length > 0 ? ` + ${item.addonNames.join(', ')}` : '';
+    lines.push(
+      `• ${item.quantity}× ${item.productName}${sizePart}${addonsPart} — ${formatCentsBRL(item.lineTotalCents)}`
+    );
+  }
+
+  if (input.subtotalCents !== undefined) {
+    lines.push(`🧾 Subtotal — ${formatCentsBRL(input.subtotalCents)}`);
   }
 
   if (input.fulfillmentType === 'delivery') {
@@ -108,6 +121,10 @@ export function buildWhatsAppOrderMessage(input: WhatsAppOrderMessageInput): str
     if (input.deliveryAddress) {
       lines.push(`📍 ${input.deliveryAddress}`);
     }
+  } else if (input.fulfillmentType === 'table') {
+    lines.push(`🍽️ Consumo na mesa — ${input.tableLabel || 'Mesa informada'}`);
+  } else if (input.fulfillmentType === 'counter') {
+    lines.push(`🏪 Retirada no balcão (atendimento presencial)`);
   } else {
     lines.push(`🛍️ Retirada no local — ${formatCentsBRL(0)}`);
     if (input.pickupAddress) {

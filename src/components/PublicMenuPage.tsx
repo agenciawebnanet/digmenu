@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Search,
   ShoppingBag,
@@ -13,18 +13,29 @@ import {
   Store as StoreIcon,
   ArrowLeft,
   UtensilsCrossed,
+  User,
+  QrCode,
 } from 'lucide-react';
 import { apiRequest, ApiError } from '../lib/api';
+import { useStoreSocket } from '../lib/useStoreSocket';
 import {
   Category,
+  CustomerAccount,
   DeliveryNeighborhood,
+  FulfillmentType,
   OrderRecord,
+  PlatformConfig,
   Product,
+  ProductAddon,
+  ProductSize,
   StoreHour,
   StoreOperationalStatus,
+  StoreTable,
   DAY_NAMES_PT,
+  FULFILLMENT_LABELS,
   formatBRL,
 } from '../types';
+import { CustomerAccountModal } from './CustomerAccountModal';
 
 interface PublicStoreInfo {
   id: string;
@@ -38,6 +49,8 @@ interface PublicStoreInfo {
   timezone: string;
   allowDelivery: boolean;
   allowPickup: boolean;
+  allowTable: boolean;
+  allowCounter: boolean;
   hasValidWhatsapp: boolean;
   operationalStatus: StoreOperationalStatus;
 }
@@ -47,12 +60,16 @@ interface PublicMenuResponse {
   categories: Category[];
   products: Product[];
   neighborhoods: DeliveryNeighborhood[];
+  tables: StoreTable[];
   hours: StoreHour[];
 }
 
 interface CartItem {
+  variantKey: string;
   productId: string;
   name: string;
+  selectedSize?: ProductSize | null;
+  selectedAddons: ProductAddon[];
   unitPriceCents: number;
   quantity: number;
   imageUrl: string;
@@ -60,6 +77,7 @@ interface CartItem {
 
 interface PublicMenuPageProps {
   slug: string;
+  config: PlatformConfig | null;
   onNavigate: (path: string) => void;
 }
 
@@ -70,8 +88,12 @@ function makeUuid(): string {
   return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate }) => {
-  const storageKey = `digmenu_cart_${slug}`;
+function buildVariantKey(productId: string, sizeId?: string, addonIds: string[] = []): string {
+  return `${productId}::${sizeId || ''}::${[...addonIds].sort().join(',')}`;
+}
+
+export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, config, onNavigate }) => {
+  const storageKey = `digmenu_cart_v3_${slug}`;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -80,6 +102,12 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showHoursModal, setShowHoursModal] = useState(false);
+
+  // Product customization modal (sizes + addons)
+  const [customizingProduct, setCustomizingProduct] = useState<Product | null>(null);
+  const [modalSizeId, setModalSizeId] = useState<string>('');
+  const [modalAddonIds, setModalAddonIds] = useState<string[]>([]);
+  const [modalQty, setModalQty] = useState<number>(1);
 
   // Zoomed product image modal
   const [zoomedPhoto, setZoomedPhoto] = useState<{ url: string; title: string } | null>(null);
@@ -97,7 +125,9 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
   // Checkout drawer & form states
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
-  const [fulfillmentType, setFulfillmentType] = useState<'delivery' | 'pickup'>('delivery');
+  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('delivery');
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [detectedTableCode, setDetectedTableCode] = useState<string>('');
   const [neighborhoodId, setNeighborhoodId] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [notes, setNotes] = useState('');
@@ -108,32 +138,54 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
   const [catalogChanges, setCatalogChanges] = useState<string[]>([]);
   const [completedOrder, setCompletedOrder] = useState<OrderRecord | null>(null);
 
-  const loadMenu = async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const data = await apiRequest<PublicMenuResponse>(`/api/public/stores/${encodeURIComponent(slug)}`);
-      setMenuData(data);
+  // Individual customer account state
+  const [customer, setCustomer] = useState<CustomerAccount | null>(null);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
 
-      // Set default fulfillment based on what store enables
-      if (!data.store.allowDelivery && data.store.allowPickup) {
-        setFulfillmentType('pickup');
-      } else if (data.store.allowDelivery) {
-        setFulfillmentType('delivery');
-      }
+  const loadMenu = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      setLoadError('');
+      try {
+        const data = await apiRequest<PublicMenuResponse>(`/api/public/stores/${encodeURIComponent(slug)}`);
+        setMenuData(data);
 
-      if (data.neighborhoods.length > 0 && !neighborhoodId) {
-        setNeighborhoodId(data.neighborhoods[0].id);
+        // Read ?mesa=CODE from URL on first load
+        const urlParams = new URLSearchParams(window.location.search);
+        const mesaParam = (urlParams.get('mesa') || '').trim().toLowerCase();
+        const matchedTable = mesaParam
+          ? data.tables.find((t) => t.table_code.toLowerCase() === mesaParam)
+          : undefined;
+
+        if (matchedTable && data.store.allowTable) {
+          setDetectedTableCode(matchedTable.table_code);
+          setSelectedTableId(matchedTable.id);
+          setFulfillmentType('table');
+        } else if (!silent) {
+          if (data.store.allowDelivery) setFulfillmentType('delivery');
+          else if (data.store.allowPickup) setFulfillmentType('pickup');
+          else if (data.store.allowTable) setFulfillmentType('table');
+          else if (data.store.allowCounter) setFulfillmentType('counter');
+        }
+
+        if (data.tables.length > 0 && !selectedTableId && !matchedTable) {
+          setSelectedTableId(data.tables[0].id);
+        }
+        if (data.neighborhoods.length > 0 && !neighborhoodId) {
+          setNeighborhoodId(data.neighborhoods[0].id);
+        }
+      } catch (err: any) {
+        if (!silent) {
+          setLoadError(err?.message || 'Não foi possível carregar este cardápio.');
+        }
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch (err: any) {
-      setLoadError(err?.message || 'Não foi possível carregar este cardápio.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [slug, neighborhoodId, selectedTableId]
+  );
 
   useEffect(() => {
-    // Reload cart when slug changes
     try {
       const saved = localStorage.getItem(storageKey);
       setCart(saved ? (JSON.parse(saved) as CartItem[]) : []);
@@ -144,8 +196,17 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
     setCheckoutError('');
     setCatalogChanges([]);
     setIdempotencyKey(makeUuid());
-    loadMenu();
+    loadMenu(false);
   }, [slug]);
+
+  useStoreSocket({
+    slug,
+    onEvent: (evt) => {
+      if (evt.type === 'menu:updated' || evt.type === 'store:updated') {
+        loadMenu(true);
+      }
+    },
+  });
 
   useEffect(() => {
     try {
@@ -156,22 +217,54 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
   }, [cart, storageKey]);
 
   useEffect(() => {
+    apiRequest<{ customer: CustomerAccount }>('/api/customer/me')
+      .then((res) => {
+        setCustomer(res.customer);
+        setCustomerName((prev) => prev || res.customer.name);
+        setDeliveryAddress((prev) => prev || res.customer.defaultAddress || '');
+      })
+      .catch(() => {
+        setCustomer(null);
+      });
+  }, []);
+
+  const handleCustomerChange = (nextCustomer: CustomerAccount | null) => {
+    setCustomer(nextCustomer);
+    if (nextCustomer) {
+      setCustomerName((prev) => prev || nextCustomer.name);
+      setDeliveryAddress((prev) => prev || nextCustomer.defaultAddress || '');
+    }
+  };
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setZoomedPhoto(null);
         setShowHoursModal(false);
+        setShowCustomerModal(false);
+        setCustomizingProduct(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const addToCart = (product: Product) => {
+  const openProductOrAdd = (product: Product) => {
+    const hasVariants = (product.sizes && product.sizes.length > 0) || (product.addons && product.addons.length > 0);
+    if (hasVariants) {
+      setCustomizingProduct(product);
+      setModalSizeId(product.sizes?.[0]?.id || '');
+      setModalAddonIds([]);
+      setModalQty(1);
+      return;
+    }
+
+    const variantKey = buildVariantKey(product.id);
     setCart((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
+      const existing = prev.find((item) => item.variantKey === variantKey);
       if (existing) {
         return prev.map((item) =>
-          item.productId === product.id
+          item.variantKey === variantKey
             ? { ...item, quantity: item.quantity + 1, unitPriceCents: product.price_cents, name: product.name }
             : item
         );
@@ -179,8 +272,11 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
       return [
         ...prev,
         {
+          variantKey,
           productId: product.id,
           name: product.name,
+          selectedSize: null,
+          selectedAddons: [],
           unitPriceCents: product.price_cents,
           quantity: 1,
           imageUrl: product.image_url,
@@ -192,12 +288,54 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
     setCheckoutError('');
   };
 
-  const updateCartQuantity = (productId: string, delta: number) => {
+  const confirmCustomProductAdd = () => {
+    if (!customizingProduct) return;
+    const chosenSize =
+      customizingProduct.sizes?.find((s) => s.id === modalSizeId) || customizingProduct.sizes?.[0] || null;
+    const chosenAddons = (customizingProduct.addons || []).filter((a) => modalAddonIds.includes(a.id));
+    const baseCents = chosenSize ? chosenSize.priceCents : customizingProduct.price_cents;
+    const addonsCents = chosenAddons.reduce((acc, a) => acc + a.priceCents, 0);
+    const unitPriceCents = baseCents + addonsCents;
+    const variantKey = buildVariantKey(
+      customizingProduct.id,
+      chosenSize?.id,
+      chosenAddons.map((a) => a.id)
+    );
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.variantKey === variantKey);
+      if (existing) {
+        return prev.map((item) =>
+          item.variantKey === variantKey
+            ? { ...item, quantity: item.quantity + modalQty, unitPriceCents }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          variantKey,
+          productId: customizingProduct.id,
+          name: customizingProduct.name,
+          selectedSize: chosenSize,
+          selectedAddons: chosenAddons,
+          unitPriceCents,
+          quantity: modalQty,
+          imageUrl: customizingProduct.image_url,
+        },
+      ];
+    });
+
+    setCustomizingProduct(null);
+    setIdempotencyKey(makeUuid());
+    setCatalogChanges([]);
+    setCheckoutError('');
+  };
+
+  const updateCartQuantity = (variantKey: string, delta: number) => {
     setCart((prev) =>
       prev
-        .map((item) =>
-          item.productId === productId ? { ...item, quantity: item.quantity + delta } : item
-        )
+        .map((item) => (item.variantKey === variantKey ? { ...item, quantity: item.quantity + delta } : item))
         .filter((item) => item.quantity > 0)
     );
     setIdempotencyKey(makeUuid());
@@ -216,6 +354,11 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
     return menuData.neighborhoods.find((n) => n.id === neighborhoodId);
   }, [menuData, neighborhoodId]);
 
+  const selectedTable = useMemo(() => {
+    if (!menuData) return undefined;
+    return menuData.tables.find((t) => t.id === selectedTableId);
+  }, [menuData, selectedTableId]);
+
   const deliveryFeeCents =
     fulfillmentType === 'delivery' && selectedNeighborhood ? selectedNeighborhood.fee_cents : 0;
   const totalCents = subtotalCents + deliveryFeeCents;
@@ -226,9 +369,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
       const catOk = selectedCategoryId === 'all' || p.category_id === selectedCategoryId;
       const q = searchQuery.trim().toLowerCase();
       const searchOk =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q);
+        !q || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
       return catOk && searchOk;
     });
   }, [menuData, selectedCategoryId, searchQuery]);
@@ -243,10 +384,20 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
         .filter((item) => productMap.has(item.productId))
         .map((item) => {
           const p = productMap.get(item.productId)!;
+          const nextSize = item.selectedSize
+            ? p.sizes.find((s) => s.id === item.selectedSize?.id) || p.sizes[0] || null
+            : p.sizes[0] || null;
+          const nextAddons = item.selectedAddons
+            .map((a) => p.addons.find((pa) => pa.id === a.id))
+            .filter(Boolean) as ProductAddon[];
+          const base = nextSize ? nextSize.priceCents : p.price_cents;
+          const addTotal = nextAddons.reduce((acc, a) => acc + a.priceCents, 0);
           return {
             ...item,
             name: p.name,
-            unitPriceCents: p.price_cents,
+            selectedSize: nextSize,
+            selectedAddons: nextAddons,
+            unitPriceCents: base + addTotal,
             imageUrl: p.image_url,
           };
         })
@@ -269,12 +420,15 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
         idempotencyKey,
         customerName: customerName.trim(),
         fulfillmentType,
+        tableId: fulfillmentType === 'table' ? selectedTableId : undefined,
         neighborhoodId: fulfillmentType === 'delivery' ? neighborhoodId : undefined,
         deliveryAddress: fulfillmentType === 'delivery' ? deliveryAddress.trim() : undefined,
         notes: notes.trim(),
         expectedDeliveryFeeCents: fulfillmentType === 'delivery' ? deliveryFeeCents : 0,
         items: cart.map((c) => ({
           productId: c.productId,
+          selectedSizeId: c.selectedSize?.id,
+          selectedAddonIds: c.selectedAddons.map((a) => a.id),
           quantity: c.quantity,
           expectedUnitPriceCents: c.unitPriceCents,
         })),
@@ -298,8 +452,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
         await handleReviewAfterCatalogChange();
       } else {
         setCheckoutError(err?.message || 'Não foi possível finalizar o pedido.');
-        // Refresh store operational status in case it paused/closed
-        loadMenu();
+        loadMenu(true);
       }
     } finally {
       setSubmittingOrder(false);
@@ -339,8 +492,21 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
     );
   }
 
-  const { store, categories, hours } = menuData;
+  const { store, categories, hours, tables } = menuData;
   const op = store.operationalStatus;
+
+  const modalSize = customizingProduct?.sizes?.find((s) => s.id === modalSizeId) || customizingProduct?.sizes?.[0];
+  const modalBaseCents = modalSize ? modalSize.priceCents : customizingProduct?.price_cents || 0;
+  const modalAddonsCents = (customizingProduct?.addons || [])
+    .filter((a) => modalAddonIds.includes(a.id))
+    .reduce((acc, a) => acc + a.priceCents, 0);
+  const modalTotalCents = (modalBaseCents + modalAddonsCents) * modalQty;
+
+  const availableModes: Array<{ key: FulfillmentType; label: string }> = [];
+  if (store.allowDelivery) availableModes.push({ key: 'delivery', label: 'Entrega' });
+  if (store.allowPickup) availableModes.push({ key: 'pickup', label: 'Retirada' });
+  if (store.allowTable && tables.length > 0) availableModes.push({ key: 'table', label: 'Na mesa' });
+  if (store.allowCounter) availableModes.push({ key: 'counter', label: 'Balcão' });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 overflow-x-hidden">
@@ -358,28 +524,49 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
           <span className="font-display text-sm sm:text-base font-bold text-slate-900 truncate min-w-0">
             {store.name}
           </span>
-          <span
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border shrink-0 whitespace-nowrap ${
-              op.canAcceptOrders
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border-rose-200'
-            }`}
-          >
-            {op.badgeLabel}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className={`px-2 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap ${
+                op.canAcceptOrders
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-rose-50 text-rose-800 border-rose-200'
+              }`}
+            >
+              {op.badgeLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowCustomerModal(true)}
+              aria-label={customer ? `Conta de ${customer.name}` : 'Entrar como cliente'}
+              className="min-h-[40px] px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <User className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+              <span className="max-w-[72px] sm:max-w-[120px] truncate">
+                {customer ? customer.name.split(' ')[0] : 'Entrar'}
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-3 sm:px-5 pt-4 space-y-5">
+        {detectedTableCode && selectedTable && (
+          <div className="p-3.5 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <QrCode className="w-5 h-5 text-orange-700 shrink-0" />
+              <p className="text-xs sm:text-sm font-semibold text-orange-950 truncate">
+                Atendimento via QR Code: <strong>{selectedTable.label}</strong>
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-orange-800 shrink-0">Pedido na mesa</span>
+          </div>
+        )}
+
         {/* Store Identity Card */}
         <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
           {store.coverUrl && (
             <div className="h-36 sm:h-48 bg-slate-200">
-              <img
-                src={store.coverUrl}
-                alt={store.name}
-                className="w-full h-full object-cover"
-              />
+              <img src={store.coverUrl} alt={store.name} className="w-full h-full object-cover" />
             </div>
           )}
           <div className="p-4 sm:p-5 space-y-3">
@@ -490,7 +677,22 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
             </div>
           ) : (
             filteredProducts.map((product) => {
-              const inCart = cart.find((c) => c.productId === product.id);
+              const hasVariants =
+                (product.sizes && product.sizes.length > 0) ||
+                (product.addons && product.addons.length > 0);
+              const simpleVariantKey = buildVariantKey(product.id);
+              const simpleCartItem = !hasVariants
+                ? cart.find((c) => c.variantKey === simpleVariantKey)
+                : undefined;
+              const productCartQty = cart
+                .filter((c) => c.productId === product.id)
+                .reduce((acc, c) => acc + c.quantity, 0);
+
+              const minPriceCents =
+                product.sizes && product.sizes.length > 0
+                  ? Math.min(...product.sizes.map((s) => s.priceCents))
+                  : product.price_cents;
+
               return (
                 <article
                   key={product.id}
@@ -521,29 +723,36 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                           {product.description}
                         </p>
                       )}
+                      {hasVariants && (
+                        <p className="text-[11px] font-medium text-orange-700 mt-1">
+                          {product.sizes.length > 0 ? `${product.sizes.length} tamanhos` : ''}
+                          {product.sizes.length > 0 && product.addons.length > 0 ? ' · ' : ''}
+                          {product.addons.length > 0 ? `${product.addons.length} adicionais` : ''}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <span className="text-sm sm:text-base font-bold text-slate-900 font-mono tabular-nums">
-                        {formatBRL(product.price_cents)}
+                        {product.sizes && product.sizes.length > 0 ? `A partir de ${formatBRL(minPriceCents)}` : formatBRL(minPriceCents)}
                       </span>
 
-                      {inCart ? (
+                      {simpleCartItem ? (
                         <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
                           <button
                             type="button"
-                            onClick={() => updateCartQuantity(product.id, -1)}
+                            onClick={() => updateCartQuantity(simpleVariantKey, -1)}
                             aria-label={`Remover uma unidade de ${product.name}`}
                             className="min-w-[36px] min-h-[36px] bg-white rounded-lg flex items-center justify-center text-slate-800 border border-slate-200 cursor-pointer"
                           >
                             <Minus className="w-4 h-4" />
                           </button>
                           <span className="w-7 text-center text-sm font-bold font-mono tabular-nums">
-                            {inCart.quantity}
+                            {simpleCartItem.quantity}
                           </span>
                           <button
                             type="button"
-                            onClick={() => updateCartQuantity(product.id, 1)}
+                            onClick={() => updateCartQuantity(simpleVariantKey, 1)}
                             aria-label={`Adicionar uma unidade de ${product.name}`}
                             className="min-w-[36px] min-h-[36px] bg-orange-600 text-white rounded-lg flex items-center justify-center cursor-pointer"
                           >
@@ -553,11 +762,17 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                       ) : (
                         <button
                           type="button"
-                          onClick={() => addToCart(product)}
+                          onClick={() => openProductOrAdd(product)}
                           className="min-h-[44px] px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
                         >
                           <Plus className="w-4 h-4" />
-                          <span>Adicionar</span>
+                          <span>
+                            {hasVariants
+                              ? productCartQty > 0
+                                ? `Escolher (${productCartQty})`
+                                : 'Escolher'
+                              : 'Adicionar'}
+                          </span>
                         </button>
                       )}
                     </div>
@@ -569,7 +784,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
         </section>
       </main>
 
-      {/* Sticky Bottom Cart Bar (fits under 15% mobile height) */}
+      {/* Sticky Bottom Cart Bar */}
       {(cartItemCount > 0 || completedOrder) && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 sm:px-5 py-2.5">
           <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
@@ -605,6 +820,150 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Product Sizes & Addons Modal */}
+      {customizingProduct && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setCustomizingProduct(null)}
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 flex items-center justify-between gap-3">
+              <h2 className="font-display text-base font-bold text-slate-900 truncate">
+                {customizingProduct.name}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setCustomizingProduct(null)}
+                aria-label="Fechar opções do produto"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+              {customizingProduct.description && (
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                  {customizingProduct.description}
+                </p>
+              )}
+
+              {customizingProduct.sizes && customizingProduct.sizes.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Escolha o tamanho *
+                  </p>
+                  <div className="space-y-2">
+                    {customizingProduct.sizes.map((size) => {
+                      const active = (modalSize?.id || '') === size.id;
+                      return (
+                        <label
+                          key={size.id}
+                          className={`min-h-[48px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                            active
+                              ? 'border-orange-600 bg-orange-50'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="radio"
+                              name="product-size"
+                              checked={active}
+                              onChange={() => setModalSizeId(size.id)}
+                              className="w-4 h-4 accent-orange-600"
+                            />
+                            <span className="text-sm font-semibold text-slate-900">{size.name}</span>
+                          </div>
+                          <span className="text-sm font-bold font-mono tabular-nums text-slate-900">
+                            {formatBRL(size.priceCents)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {customizingProduct.addons && customizingProduct.addons.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Adicionais opcionais
+                  </p>
+                  <div className="space-y-2">
+                    {customizingProduct.addons.map((addon) => {
+                      const checked = modalAddonIds.includes(addon.id);
+                      return (
+                        <label
+                          key={addon.id}
+                          className={`min-h-[48px] px-3.5 py-2.5 rounded-xl border flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                            checked
+                              ? 'border-orange-600 bg-orange-50'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setModalAddonIds((prev) => [...prev, addon.id]);
+                                } else {
+                                  setModalAddonIds((prev) => prev.filter((id) => id !== addon.id));
+                                }
+                              }}
+                              className="w-4 h-4 accent-orange-600 rounded"
+                            />
+                            <span className="text-sm font-medium text-slate-900">{addon.name}</span>
+                          </div>
+                          <span className="text-sm font-semibold font-mono tabular-nums text-emerald-700">
+                            + {formatBRL(addon.priceCents)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-5 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setModalQty((q) => Math.max(1, q - 1))}
+                  className="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center hover:bg-slate-100 cursor-pointer"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <span className="w-7 text-center text-sm font-bold font-mono tabular-nums">{modalQty}</span>
+                <button
+                  type="button"
+                  onClick={() => setModalQty((q) => Math.min(99, q + 1))}
+                  className="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center hover:bg-slate-100 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={confirmCustomProductAdd}
+                className="flex-1 min-h-[44px] bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-xl flex items-center justify-between px-4 cursor-pointer"
+              >
+                <span>Adicionar à sacola</span>
+                <span className="font-mono tabular-nums">{formatBRL(modalTotalCents)}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -708,9 +1067,9 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
             {completedOrder ? (
               <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-1">
-                  <p className="text-sm font-bold">Pedido preparado para WhatsApp</p>
+                  <p className="text-sm font-bold">Pedido registrado no sistema e pronto para WhatsApp</p>
                   <p className="text-xs leading-relaxed">
-                    Seu pedido foi conferido no servidor e registrado na loja. Clique abaixo para confirmar o envio no WhatsApp.
+                    Seu pedido foi conferido no servidor e enviado ao painel do restaurante. Clique abaixo para enviar a confirmação pelo WhatsApp.
                   </p>
                 </div>
 
@@ -767,28 +1126,33 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                     </div>
                   )}
 
-                  {/* Cart Items */}
                   {cart.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-6">
-                      Sua sacola está vazia.
-                    </p>
+                    <p className="text-sm text-slate-500 text-center py-6">Sua sacola está vazia.</p>
                   ) : (
                     <div className="space-y-2">
                       {cart.map((item) => (
                         <div
-                          key={item.productId}
+                          key={item.variantKey}
                           className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3"
                         >
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{item.name}</p>
-                            <p className="text-xs text-slate-600 font-mono tabular-nums">
+                            <p className="text-sm font-semibold text-slate-900 truncate">
+                              {item.name}
+                              {item.selectedSize ? ` (${item.selectedSize.name})` : ''}
+                            </p>
+                            {item.selectedAddons.length > 0 && (
+                              <p className="text-xs text-slate-500 truncate">
+                                + {item.selectedAddons.map((a) => a.name).join(', ')}
+                              </p>
+                            )}
+                            <p className="text-xs text-slate-600 font-mono tabular-nums mt-0.5">
                               {formatBRL(item.unitPriceCents)} cada
                             </p>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <button
                               type="button"
-                              onClick={() => updateCartQuantity(item.productId, -1)}
+                              onClick={() => updateCartQuantity(item.variantKey, -1)}
                               className="min-w-[36px] min-h-[36px] bg-white border border-slate-200 rounded-lg flex items-center justify-center cursor-pointer"
                             >
                               <Minus className="w-3.5 h-3.5" />
@@ -798,7 +1162,7 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                             </span>
                             <button
                               type="button"
-                              onClick={() => updateCartQuantity(item.productId, 1)}
+                              onClick={() => updateCartQuantity(item.variantKey, 1)}
                               className="min-w-[36px] min-h-[36px] bg-white border border-slate-200 rounded-lg flex items-center justify-center cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -811,6 +1175,25 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
 
                   {cart.length > 0 && (
                     <>
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2 text-xs">
+                        {customer ? (
+                          <span className="text-slate-700 truncate">
+                            Conectado como <strong>{customer.name}</strong> (pedido salvo em sua conta)
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">
+                            Pedido rápido ou entre na sua conta individual
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomerModal(true)}
+                          className="text-orange-700 font-semibold hover:underline shrink-0 cursor-pointer"
+                        >
+                          {customer ? 'Ver conta' : 'Entrar'}
+                        </button>
+                      </div>
+
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                           Seu nome *
@@ -830,36 +1213,24 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                           Modalidade *
                         </label>
                         <div className="grid grid-cols-2 gap-2">
-                          {store.allowDelivery && (
+                          {availableModes.map((mode) => (
                             <button
+                              key={mode.key}
                               type="button"
-                              onClick={() => setFulfillmentType('delivery')}
+                              onClick={() => setFulfillmentType(mode.key)}
                               className={`min-h-[44px] px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-colors cursor-pointer ${
-                                fulfillmentType === 'delivery'
+                                fulfillmentType === mode.key
                                   ? 'bg-orange-600 text-white border-orange-600'
                                   : 'bg-white text-slate-700 border-slate-300'
                               }`}
                             >
-                              Entrega
+                              {mode.label}
                             </button>
-                          )}
-                          {store.allowPickup && (
-                            <button
-                              type="button"
-                              onClick={() => setFulfillmentType('pickup')}
-                              className={`min-h-[44px] px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-colors cursor-pointer ${
-                                fulfillmentType === 'pickup'
-                                  ? 'bg-orange-600 text-white border-orange-600'
-                                  : 'bg-white text-slate-700 border-slate-300'
-                              }`}
-                            >
-                              Retirada no local
-                            </button>
-                          )}
+                          ))}
                         </div>
                       </div>
 
-                      {fulfillmentType === 'delivery' ? (
+                      {fulfillmentType === 'delivery' && (
                         <div className="space-y-3">
                           <div>
                             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -899,9 +1270,35 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                             />
                           </div>
                         </div>
-                      ) : (
+                      )}
+
+                      {fulfillmentType === 'table' && (
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                            Selecione a mesa *
+                          </label>
+                          <select
+                            required
+                            value={selectedTableId}
+                            onChange={(e) => setSelectedTableId(e.target.value)}
+                            className="w-full min-h-[44px] px-3 py-2 text-sm rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-orange-600"
+                          >
+                            {tables.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.label} ({t.seats} lugares)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {(fulfillmentType === 'pickup' || fulfillmentType === 'counter') && (
                         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm space-y-1">
-                          <p className="font-semibold text-slate-800">Endereço para retirada:</p>
+                          <p className="font-semibold text-slate-800">
+                            {fulfillmentType === 'counter'
+                              ? 'Retirada no balcão (consumo presencial):'
+                              : 'Endereço para retirada:'}
+                          </p>
                           <p className="text-slate-600">
                             {store.pickupAddress} {store.city ? `— ${store.city}` : ''}
                           </p>
@@ -935,7 +1332,9 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
                         <span>
                           {fulfillmentType === 'delivery'
                             ? `Entrega (${selectedNeighborhood?.name || 'selecione'})`
-                            : 'Retirada no local'}
+                            : fulfillmentType === 'table'
+                            ? `Consumo (${selectedTable?.label || 'Mesa'})`
+                            : FULFILLMENT_LABELS[fulfillmentType]}
                         </span>
                         <span className="font-mono tabular-nums">{formatBRL(deliveryFeeCents)}</span>
                       </div>
@@ -963,6 +1362,17 @@ export const PublicMenuPage: React.FC<PublicMenuPageProps> = ({ slug, onNavigate
           </div>
         </div>
       )}
+
+      {/* Individual Customer Account Modal (Separated from Merchant Stores) */}
+      <CustomerAccountModal
+        isOpen={showCustomerModal}
+        storeName={store.name}
+        storeSlug={slug}
+        config={config}
+        customer={customer}
+        onClose={() => setShowCustomerModal(false)}
+        onCustomerChange={handleCustomerChange}
+      />
     </div>
   );
 };

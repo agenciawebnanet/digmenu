@@ -5,18 +5,42 @@ export type SubscriptionStatus =
   | 'renovacao_cancelada'
   | 'expirada';
 
+export type OrderStatus =
+  | 'novo'
+  | 'aceito'
+  | 'em_preparo'
+  | 'pronto'
+  | 'concluido'
+  | 'cancelado';
+
+export type FulfillmentType = 'delivery' | 'pickup' | 'table' | 'counter';
+
+export type PaymentMethod =
+  | 'whatsapp'
+  | 'pix'
+  | 'dinheiro'
+  | 'cartao_credito'
+  | 'cartao_debito'
+  | 'outro';
+
+export type PaymentStatus = 'pending' | 'paid' | 'refunded';
+
+export type StoreMemberRole = 'owner' | 'manager' | 'kitchen' | 'waiter' | 'cashier';
+
 export interface StoreOperationalStatus {
   canAcceptOrders: boolean;
   isOpenBySchedule: boolean;
   isPaused: boolean;
   isSubscriptionBlocked: boolean;
+  isPlatformBlocked?: boolean;
   badgeLabel:
     | 'Aberto'
     | 'Fechado'
     | 'Pausado'
     | 'Assinatura expirada'
     | 'Assinatura pendente'
-    | 'WhatsApp pendente';
+    | 'WhatsApp pendente'
+    | 'Loja bloqueada';
   reason: string;
   currentLocalTime: string;
   currentDayOfWeek: number;
@@ -35,8 +59,13 @@ export interface StoreSummary {
   timezone: string;
   allowDelivery: boolean;
   allowPickup: boolean;
+  allowTable: boolean;
+  allowCounter: boolean;
   isPaused: boolean;
   pauseReason: string;
+  isPlatformBlocked?: boolean;
+  platformBlockReason?: string;
+  myRole?: StoreMemberRole;
   operationalStatus: StoreOperationalStatus;
   subscriptionStatus: SubscriptionStatus;
 }
@@ -49,6 +78,18 @@ export interface Category {
   sort_order: number;
 }
 
+export interface ProductSize {
+  id: string;
+  name: string;
+  priceCents: number;
+}
+
+export interface ProductAddon {
+  id: string;
+  name: string;
+  priceCents: number;
+}
+
 export interface Product {
   id: string;
   store_id?: string;
@@ -56,8 +97,11 @@ export interface Product {
   name: string;
   description: string;
   price_cents: number;
+  sizes: ProductSize[];
+  addons: ProductAddon[];
   image_url: string;
   is_available?: boolean;
+  isAvailable?: boolean;
   sort_order: number;
 }
 
@@ -76,11 +120,33 @@ export interface DeliveryNeighborhood {
   isActive?: boolean;
 }
 
+export interface StoreTable {
+  id: string;
+  store_id?: string;
+  label: string;
+  table_code: string;
+  seats: number;
+  isActive?: boolean;
+  is_active?: number;
+}
+
+export interface StoreTeamMember {
+  id: string;
+  user_id: string;
+  role: StoreMemberRole;
+  created_at: string;
+  name: string;
+  email: string;
+}
+
 export interface OrderItemRecord {
   id: string;
   order_id: string;
   product_id: string | null;
   product_name_snapshot: string;
+  selectedSize?: ProductSize | null;
+  selectedAddons?: ProductAddon[];
+  variant_key?: string;
   unit_price_cents: number;
   quantity: number;
   line_total_cents: number;
@@ -90,9 +156,13 @@ export interface OrderRecord {
   id: string;
   order_number: number;
   store_id: string;
+  customer_id?: string | null;
   idempotency_key: string;
   customer_name: string;
-  fulfillment_type: 'delivery' | 'pickup';
+  fulfillment_type: FulfillmentType;
+  source?: 'public_menu' | 'waiter' | 'pos';
+  table_id?: string | null;
+  table_label?: string | null;
   neighborhood_id: string | null;
   neighborhood_name: string | null;
   delivery_address: string | null;
@@ -100,11 +170,106 @@ export interface OrderRecord {
   subtotal_cents: number;
   delivery_fee_cents: number;
   total_cents: number;
-  status: 'prepared_whatsapp' | 'confirmed' | 'completed' | 'cancelled';
+  status: OrderStatus;
+  payment_method?: PaymentMethod;
+  payment_status?: PaymentStatus;
+  paid_cents?: number;
+  change_for_cents?: number;
   whatsapp_message: string;
   whatsapp_url: string;
+  accepted_at?: string | null;
+  preparing_at?: string | null;
+  ready_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
   created_at: string;
   items: OrderItemRecord[];
+}
+
+export interface CustomerOrderRecord extends OrderRecord {
+  store_name?: string;
+  store_slug?: string;
+}
+
+export interface CustomerAccount {
+  id: string;
+  name: string;
+  email: string;
+  phoneE164: string;
+  defaultAddress: string;
+  avatarUrl: string;
+  authProvider: string;
+}
+
+export interface CashRegisterRecord {
+  id: string;
+  store_id: string;
+  opened_by_user_id: string | null;
+  opened_by_name: string;
+  closed_by_user_id: string | null;
+  closed_by_name: string | null;
+  status: 'open' | 'closed';
+  opening_balance_cents: number;
+  expected_closing_cents: number;
+  actual_closing_cents: number | null;
+  difference_cents: number | null;
+  notes: string;
+  opened_at: string;
+  closed_at: string | null;
+}
+
+export interface CashMovementRecord {
+  id: string;
+  cash_register_id: string;
+  store_id: string;
+  type: 'suprimento' | 'sangria' | 'venda_dinheiro' | 'venda_pix' | 'venda_cartao' | 'estorno';
+  amount_cents: number;
+  payment_method: string;
+  order_id: string | null;
+  description: string;
+  created_by_name: string;
+  created_at: string;
+}
+
+export interface CashRegisterState {
+  openRegister: CashRegisterRecord | null;
+  movements: CashMovementRecord[];
+  expectedCashCents: number;
+  summary: {
+    openingBalanceCents: number;
+    cashSalesCents: number;
+    pixSalesCents: number;
+    cardSalesCents: number;
+    suprimentoCents: number;
+    sangriaCents: number;
+    refundCents: number;
+    expectedCashCents: number;
+  };
+  recentClosed: CashRegisterRecord[];
+}
+
+export interface StoreReportData {
+  periodDays: number;
+  totalOrders: number;
+  validOrders: number;
+  cancelledOrders: number;
+  grossRevenueCents: number;
+  paidRevenueCents: number;
+  pendingPaymentCents: number;
+  averageTicketCents: number;
+  byStatus: Array<{ status: OrderStatus; count: number; revenueCents: number }>;
+  byFulfillment: Array<{ fulfillmentType: FulfillmentType; count: number; revenueCents: number }>;
+  byPaymentMethod: Array<{ paymentMethod: PaymentMethod; count: number; revenueCents: number }>;
+  topProducts: Array<{ name: string; quantitySold: number; revenueCents: number }>;
+  dailySeries: Array<{ date: string; orderCount: number; revenueCents: number }>;
+  cashSummary: {
+    suprimentoCents: number;
+    sangriaCents: number;
+    cashSalesCents: number;
+    pixSalesCents: number;
+    cardSalesCents: number;
+    registersClosedCount: number;
+  };
 }
 
 export interface SubscriptionRecord {
@@ -140,9 +305,16 @@ export interface PlatformConfig {
   mercadoPago: {
     configured: boolean;
     isTestCredential: boolean;
-    mode: 'mercadopago_test' | 'simulator';
+    mode: 'mercadopago_test' | 'mercadopago_live' | 'unconfigured';
+    simulatorEnabled: boolean;
+    missingEnvVars: string[];
     warning?: string;
   };
+  googleAuth: {
+    configured: boolean;
+    mode: 'google_oauth' | 'simulator';
+  };
+  wsSupported?: boolean;
   previewIsolated: boolean;
 }
 
@@ -150,6 +322,9 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string;
+  authProvider?: string;
+  isPlatformAdmin?: boolean;
 }
 
 export function formatBRL(cents: number): string {
@@ -211,4 +386,37 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, { label: str
   pagamento_em_atraso: { label: 'Pagamento em atraso', tone: 'bg-rose-50 text-rose-800 border-rose-200' },
   renovacao_cancelada: { label: 'Renovação cancelada', tone: 'bg-slate-100 text-slate-800 border-slate-300' },
   expirada: { label: 'Expirada', tone: 'bg-red-100 text-red-900 border-red-300' },
+};
+
+export const ORDER_STATUS_META: Record<OrderStatus, { label: string; tone: string }> = {
+  novo: { label: 'Novo', tone: 'bg-amber-100 text-amber-900 border-amber-300' },
+  aceito: { label: 'Aceito', tone: 'bg-blue-100 text-blue-900 border-blue-300' },
+  em_preparo: { label: 'Em preparo', tone: 'bg-indigo-100 text-indigo-900 border-indigo-300' },
+  pronto: { label: 'Pronto', tone: 'bg-emerald-100 text-emerald-900 border-emerald-300' },
+  concluido: { label: 'Concluído', tone: 'bg-slate-100 text-slate-800 border-slate-300' },
+  cancelado: { label: 'Cancelado', tone: 'bg-rose-100 text-rose-900 border-rose-300' },
+};
+
+export const FULFILLMENT_LABELS: Record<FulfillmentType, string> = {
+  delivery: 'Entrega',
+  pickup: 'Retirada',
+  table: 'Na mesa',
+  counter: 'Balcão',
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  whatsapp: 'WhatsApp / A combinar',
+  pix: 'Pix',
+  dinheiro: 'Dinheiro',
+  cartao_credito: 'Cartão de Crédito',
+  cartao_debito: 'Cartão de Débito',
+  outro: 'Outro',
+};
+
+export const ROLE_LABELS: Record<StoreMemberRole, string> = {
+  owner: 'Proprietário',
+  manager: 'Gerente',
+  kitchen: 'Cozinha (KDS)',
+  waiter: 'Garçom',
+  cashier: 'Caixa (PDV)',
 };

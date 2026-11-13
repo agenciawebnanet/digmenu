@@ -17,7 +17,8 @@ export interface StoreOperationalStatus {
   isOpenBySchedule: boolean;
   isPaused: boolean;
   isSubscriptionBlocked: boolean;
-  badgeLabel: 'Aberto' | 'Fechado' | 'Pausado' | 'Assinatura expirada' | 'Assinatura pendente' | 'WhatsApp pendente';
+  isPlatformBlocked?: boolean;
+  badgeLabel: 'Aberto' | 'Fechado' | 'Pausado' | 'Assinatura expirada' | 'Assinatura pendente' | 'WhatsApp pendente' | 'Loja bloqueada';
   reason: string;
   currentLocalTime: string;
   currentDayOfWeek: number;
@@ -127,10 +128,28 @@ export function evaluateStoreOperationalStatus(params: {
   whatsappE164?: string | null;
   subscriptionStatus?: SubscriptionStatus;
   subscriptionPeriodEnd?: string | null;
+  isPlatformBlocked?: boolean;
+  platformBlockReason?: string | null;
   now?: Date;
 }): StoreOperationalStatus {
   const now = params.now || new Date();
   const { dayOfWeek, minutesSinceMidnight, formattedTime } = getStoreLocalClock(params.timezone, now);
+
+  if (params.isPlatformBlocked) {
+    return {
+      canAcceptOrders: false,
+      isOpenBySchedule: false,
+      isPaused: params.isPaused,
+      isSubscriptionBlocked: false,
+      isPlatformBlocked: true,
+      badgeLabel: 'Loja bloqueada',
+      reason:
+        params.platformBlockReason?.trim() ||
+        'Este cardápio está temporariamente suspenso pela administração da plataforma.',
+      currentLocalTime: formattedTime,
+      currentDayOfWeek: dayOfWeek,
+    };
+  }
 
   const subCheck = isEffectiveSubscriptionExpired(
     params.subscriptionStatus,

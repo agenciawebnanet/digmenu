@@ -10,6 +10,9 @@ import {
   ShieldCheck,
   Menu,
   X,
+  Users,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { PlatformConfig, StoreOperationalStatus } from '../types';
 
@@ -42,7 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const annualPriceText =
     config && config.annualPriceCents > 0 && config.annualPriceFormatted
       ? `${config.annualPriceFormatted}/ano`
-      : 'R$ —/ano (preço em definição)';
+      : 'R$ —/ano (valor em definição)';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 overflow-x-hidden">
@@ -57,7 +60,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             }}
             className="flex items-center gap-2.5 shrink-0 whitespace-nowrap"
           >
-            <span className="w-9 h-9 rounded-xl bg-orange-600 text-white flex items-center justify-center">
+            <span className="w-9 h-9 rounded-xl bg-orange-600 text-white flex items-center justify-center shadow-2xs">
               <UtensilsCrossed className="w-5 h-5" />
             </span>
             <span className="font-display text-lg font-extrabold tracking-tight text-slate-900">
@@ -69,6 +72,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <a href="#recursos" className="hover:text-slate-900 whitespace-nowrap shrink-0">
               Recursos
             </a>
+            <a href="#arquitetura" className="hover:text-slate-900 whitespace-nowrap shrink-0">
+              Lojas e Clientes
+            </a>
             <a href="#demonstracoes" className="hover:text-slate-900 whitespace-nowrap shrink-0">
               Demonstrações
             </a>
@@ -77,7 +83,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </a>
           </nav>
 
-          <div className="hidden md:flex items-center gap-4 shrink-0">
+          <div className="hidden md:flex items-center gap-3 shrink-0">
             {isAuthenticated ? (
               <button
                 onClick={() => onNavigate('/painel')}
@@ -89,13 +95,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <>
                 <button
                   onClick={() => onNavigate('/entrar')}
-                  className="px-3 py-2 min-h-[44px] text-sm font-semibold text-slate-700 hover:text-slate-900 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-3.5 py-2 min-h-[44px] text-sm font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Entrar
                 </button>
                 <button
                   onClick={() => onNavigate('/cadastro')}
-                  className="px-4 py-2.5 min-h-[44px] text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2.5 min-h-[44px] text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
                 >
                   Criar minha loja
                 </button>
@@ -121,6 +127,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               className="block py-2.5 text-sm font-medium text-slate-700"
             >
               Recursos
+            </a>
+            <a
+              href="#arquitetura"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block py-2.5 text-sm font-medium text-slate-700"
+            >
+              Lojas e Clientes
             </a>
             <a
               href="#demonstracoes"
@@ -178,21 +191,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <section className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7 space-y-6">
-            <p className="text-xs font-semibold uppercase tracking-wider text-orange-700">
-              Prévia isolada · Cardápio digital multiempresa
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-700">
+              Prévia isolada · SaaS multiempresa para restaurantes
             </p>
-            <h1 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 text-balance leading-[1.12]">
-              Cardápio digital com link próprio e pedidos organizados no WhatsApp.
+            <h1 className="font-display text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 text-balance leading-[1.1]">
+              Cardápio digital profissional com pedidos validados no WhatsApp.
             </h1>
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
-              O DigMenu centraliza o catálogo do seu restaurante, calcula taxas de entrega por bairro,
-              respeita horários de funcionamento e envia cada pedido conferido no servidor diretamente para o WhatsApp da loja.
+              O DigMenu separa a gestão de cada restaurante, oferece acesso rápido com e-mail ou
+              Google, conta individual opcional para seus clientes e assinatura exclusivamente anual
+              com controle transparente do acesso.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
               <button
                 onClick={() => onNavigate(isAuthenticated ? '/painel' : '/cadastro')}
-                className="min-h-[48px] px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="min-h-[48px] px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
                 <span>{isAuthenticated ? 'Ir para meu painel' : 'Criar minha loja'}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -201,25 +215,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 href="#demonstracoes"
                 className="min-h-[48px] px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl flex items-center justify-center transition-colors"
               >
-                Ver cardápios de exemplo
+                Ver cardápios ao vivo
               </a>
             </div>
           </div>
 
           <div className="lg:col-span-5">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-md">
               <img
                 src="/images/rest_pizzaria_cover.jpg"
                 alt="Restaurante operando com cardápio digital DigMenu"
                 className="w-full h-56 sm:h-64 object-cover"
               />
-              <div className="p-5 space-y-2 bg-white">
-                <p className="text-xs font-semibold text-slate-500">Fluxo operacional completo</p>
+              <div className="p-5 sm:p-6 space-y-3 bg-white">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Operação verificada
+                  </p>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Assinatura Ativa</span>
+                  </span>
+                </div>
                 <p className="text-sm font-bold text-slate-900">
-                  Cadastro da loja → Produtos e bairros → Link público /m/sua-loja → Pedido no WhatsApp
+                  Cadastro da loja → Produtos e bairros → Link /m/sua-loja → Pedido no WhatsApp
                 </p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Todos os valores e disponibilidade são conferidos no servidor antes de gerar a mensagem para o WhatsApp.
+                  Todos os valores, disponibilidade e taxas de entrega são conferidos no servidor
+                  antes de gerar a mensagem para o WhatsApp da loja.
                 </p>
               </div>
             </div>
@@ -231,10 +254,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <section id="recursos" className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20 space-y-10">
         <div className="max-w-2xl space-y-2">
           <h2 className="font-display text-2xl sm:text-3xl font-bold text-slate-900">
-            O que o DigMenu entrega para a operação do restaurante
+            Do anúncio ao balcão, cozinha e entrega
           </h2>
           <p className="text-sm sm:text-base text-slate-600">
-            Funcionalidades focadas no atendimento diário de restaurantes brasileiros pelo celular.
+            Fluxo completo para restaurantes brasileiros: Instagram/WhatsApp → Cardápio público → Cozinha (KDS), Garçom e PDV/Caixa.
           </p>
         </div>
 
@@ -243,9 +266,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center">
               <Store className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Isolamento multiempresa</h3>
+            <h3 className="text-base font-bold text-slate-900">Cardápio + tamanhos e adicionais</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Cada restaurante possui conta, vínculo próprio, catálogo, pedidos, horários e endereço público <span className="font-mono text-xs">/m/[slug]</span> separados.
+              Cada restaurante possui endereço <span className="font-mono text-xs">/m/[slug]</span>,
+              variações de tamanho, extras opcionais e QR Code exclusivo por mesa.
             </p>
           </div>
 
@@ -253,9 +277,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center">
               <MapPin className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Entrega por bairro e retirada</h3>
+            <h3 className="text-base font-bold text-slate-900">Entrega, retirada, mesa e balcão</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Cadastre bairros atendidos com taxas específicas em reais e configure retirada no balcão com o endereço da loja.
+              Cadastre bairros com taxas automáticas, mesas com QR Code e atendimento direto de
+              balcão ou garçom integrados.
             </p>
           </div>
 
@@ -263,9 +288,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center">
               <Clock className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Horários e pausa manual</h3>
+            <h3 className="text-base font-bold text-slate-900">Cozinha (KDS) + PDV em tempo real</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Cálculo automático de Aberto ou Fechado pelo fuso da loja, incluindo turnos que passam da meia-noite, além de pausa imediata.
+              Novos pedidos chegam ao vivo com alerta sonoro, fila da cozinha, impressão de comanda
+              e fechamento de caixa com suprimento e sangria.
             </p>
           </div>
 
@@ -273,10 +299,51 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">Pedido conferido no servidor</h3>
+            <h3 className="text-base font-bold text-slate-900">Pedido conferido no WhatsApp</h3>
             <p className="text-sm text-slate-600 leading-relaxed">
-              Preços, taxas e disponibilidade são validados no backend sem duplicação por clique duplo antes de abrir o WhatsApp.
+              Preços, adicionais, taxas e disponibilidade são validados no backend sem duplicação
+              antes de abrir o WhatsApp da loja.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Separação Lojas vs Contas de Clientes */}
+      <section id="arquitetura" className="max-w-6xl mx-auto px-4 sm:px-6 pb-14 sm:pb-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center">
+              <Store className="w-5 h-5" />
+            </div>
+            <h3 className="font-display text-xl font-bold">Contas de Lojistas e Lojas</h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Donos de restaurantes entram via e-mail/senha ou Google em <span className="font-mono text-xs">/entrar</span> e <span className="font-mono text-xs">/cadastro</span>. Cada loja tem assinatura anual, QR Code e catálogo isolados no banco.
+            </p>
+            <button
+              type="button"
+              onClick={() => onNavigate(isAuthenticated ? '/painel' : '/cadastro')}
+              className="min-h-[44px] px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold rounded-xl inline-flex items-center gap-2 cursor-pointer"
+            >
+              <span>{isAuthenticated ? 'Ir para painel do lojista' : 'Criar minha loja'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-900 flex items-center justify-center">
+              <Users className="w-5 h-5" />
+            </div>
+            <h3 className="font-display text-xl font-bold text-slate-900">Contas Individuais de Clientes</h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              No cardápio público <span className="font-mono text-xs">/m/[slug]</span>, cada cliente pode pedir rapidamente ou entrar com e-mail ou Google em sua conta individual separada, salvando endereço padrão e histórico pessoal de pedidos.
+            </p>
+            <a
+              href="#demonstracoes"
+              className="min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-900 text-sm font-semibold rounded-xl inline-flex items-center gap-2"
+            >
+              <span>Testar em um cardápio público</span>
+              <ArrowRight className="w-4 h-4" />
+            </a>
           </div>
         </div>
       </section>
@@ -289,7 +356,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Cardápios de demonstração ao vivo
             </h2>
             <p className="text-sm sm:text-base text-slate-600">
-              Abra qualquer loja de exemplo diretamente pela rota pública, recarregue a página e teste sacola, cálculo de taxa e envio para o WhatsApp.
+              Abra qualquer loja de exemplo diretamente pela rota pública, teste a conta individual de cliente, sacola, cálculo de taxa e envio para o WhatsApp.
             </p>
           </div>
 
@@ -297,7 +364,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {demoStores.map((store) => (
               <div
                 key={store.id}
-                className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex flex-col"
+                className="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex flex-col shadow-2xs"
               >
                 <div className="relative h-44 bg-slate-200">
                   {store.coverUrl ? (
@@ -318,13 +385,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-lg font-bold text-slate-900 truncate">{store.name}</h3>
                       <span
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-lg border shrink-0 ${
+                        className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border shrink-0 ${
                           store.operationalStatus.canAcceptOrders
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                            : 'bg-rose-50 text-rose-800 border-rose-200'
                         }`}
                       >
-                        {store.operationalStatus.badgeLabel}
+                        {store.operationalStatus.canAcceptOrders ? (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                        )}
+                        <span>{store.operationalStatus.badgeLabel}</span>
                       </span>
                     </div>
                     <p className="text-sm text-slate-600 line-clamp-2">{store.description}</p>
@@ -349,7 +421,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Assinatura Exclusivamente Anual */}
       <section id="assinatura" className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
-        <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 sm:p-10 space-y-6">
+        <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 sm:p-10 space-y-6 shadow-xs">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-orange-700 text-sm font-semibold">
               <ShieldCheck className="w-5 h-5" />
@@ -359,7 +431,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Assinatura anual do DigMenu
             </h2>
             <p className="text-sm sm:text-base text-slate-600">
-              Cobrança anual com renovação automática. Sem taxas por pedido e com painel completo para gerenciar catálogo, bairros e horários.
+              Cobrança anual com renovação automática. Sem taxas por pedido e com painel completo para acompanhar saúde da assinatura, catálogo, bairros e horários.
             </p>
           </div>
 
@@ -387,7 +459,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </li>
             <li className="flex items-start gap-2.5">
               <Check className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
-              <span>Envio de pedidos conferidos para o WhatsApp</span>
+              <span>Indicadores visuais de saúde da assinatura</span>
             </li>
             <li className="flex items-start gap-2.5">
               <Check className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
@@ -395,7 +467,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </li>
             <li className="flex items-start gap-2.5">
               <Check className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
-              <span>Cancelamento de renovação mantendo acesso até o fim do período vigente</span>
+              <span>Cancelamento de renovação mantendo acesso até o fim do ciclo</span>
             </li>
           </ul>
         </div>

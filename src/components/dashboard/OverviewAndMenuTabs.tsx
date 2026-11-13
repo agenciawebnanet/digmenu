@@ -10,25 +10,37 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
+  Upload,
+  ChefHat,
+  Utensils,
+  Calculator,
+  BarChart3,
 } from 'lucide-react';
 import {
+  CashRegisterState,
   Category,
+  FULFILLMENT_LABELS,
+  ORDER_STATUS_META,
   OrderRecord,
   Product,
+  ProductAddon,
+  ProductSize,
   StoreSummary,
   SubscriptionRecord,
-  SUBSCRIPTION_STATUS_LABELS,
   formatBRL,
   formatCentsForInput,
   parseBRLInputToCents,
   formatDateTimeBR,
 } from '../../types';
 import { apiRequest } from '../../lib/api';
+import { readImageFileAsDataUrl } from '../../lib/imageUpload';
+import { SubscriptionBadge } from '../SubscriptionBadge';
 
 interface OverviewTabProps {
   store: StoreSummary;
   products: Product[];
   orders: OrderRecord[];
+  cashRegister?: CashRegisterState | null;
   subscription: SubscriptionRecord | null;
   onNavigate: (path: string) => void;
 }
@@ -37,6 +49,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   store,
   products,
   orders,
+  cashRegister,
   subscription,
   onNavigate,
 }) => {
@@ -56,12 +69,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     }
   };
 
-  const subMeta = subscription
-    ? SUBSCRIPTION_STATUS_LABELS[subscription.status]
-    : SUBSCRIPTION_STATUS_LABELS.pendente;
+  const subscriptionStatus = subscription?.status || store.subscriptionStatus || 'pendente';
 
   const hasProducts = activeProducts.length > 0;
   const hasWhatsapp = Boolean(store.whatsappE164);
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayValidOrders = orders.filter(
+    (o) => o.status !== 'cancelado' && String(o.created_at).slice(0, 10) === todayKey
+  );
+  const todayRevenueCents = todayValidOrders.reduce((acc, o) => acc + (o.total_cents || 0), 0);
+  const openQueueCount = orders.filter((o) =>
+    ['novo', 'aceito', 'em_preparo', 'pronto'].includes(o.status)
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -128,7 +148,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="font-display text-base font-bold text-slate-900">Link público do cardápio</h2>
-            <p className="text-xs text-slate-600">Compartilhe este endereço com seus clientes.</p>
+            <p className="text-xs text-slate-600">Compartilhe este endereço com seus clientes ou gere QR Codes por mesa em Configurações.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -163,38 +183,93 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1.5">
-          <p className="text-xs font-semibold text-slate-500">Produtos ativos</p>
+          <p className="text-xs font-semibold text-slate-500">Vendas hoje (UTC)</p>
           <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
-            {activeProducts.length}
+            {formatBRL(todayRevenueCents)}
           </p>
           <p className="text-xs text-slate-600">
-            {hiddenProducts.length} oculto(s) no catálogo
+            {todayValidOrders.length} pedido(s) válido(s) · {openQueueCount} em andamento
           </p>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1.5">
-          <p className="text-xs font-semibold text-slate-500">Pedidos registrados</p>
-          <p className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
-            {orders.length}
+          <p className="text-xs font-semibold text-slate-500">Caixa (PDV) e Catálogo</p>
+          <p className="text-lg font-bold text-slate-900">
+            {cashRegister?.openRegister ? 'Caixa aberto' : 'Caixa fechado'}
           </p>
-          <p className="text-xs text-slate-600">Preparados para o WhatsApp</p>
+          <p className="text-xs text-slate-600">
+            {activeProducts.length} ativo(s) · {hiddenProducts.length} oculto(s)
+          </p>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1.5">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
           <p className="text-xs font-semibold text-slate-500">Assinatura anual</p>
           <div className="pt-0.5">
-            <span className={`inline-block px-2.5 py-1 text-xs font-semibold rounded-lg border ${subMeta.tone}`}>
-              {subMeta.label}
-            </span>
+            <SubscriptionBadge status={subscriptionStatus} size="md" />
           </div>
           <button
             type="button"
             onClick={() => onNavigate('/painel/assinatura')}
-            className="text-xs text-orange-700 font-semibold hover:underline pt-1 cursor-pointer"
+            className="text-xs text-orange-700 font-semibold hover:underline pt-1 block cursor-pointer"
           >
             Gerenciar assinatura anual →
           </button>
         </div>
+      </section>
+
+      {/* Atalhos Operacionais */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <button
+          type="button"
+          onClick={() => onNavigate('/painel/cozinha')}
+          className="bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-4 text-left space-y-1.5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-orange-700 font-bold text-xs">
+            <ChefHat className="w-4 h-4" />
+            <span>Cozinha (KDS)</span>
+          </div>
+          <p className="text-xs text-slate-600">Fila de preparo ao vivo ({openQueueCount} ativos)</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('/painel/garcom')}
+          className="bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-4 text-left space-y-1.5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-orange-700 font-bold text-xs">
+            <Utensils className="w-4 h-4" />
+            <span>Garçom / Mesas</span>
+          </div>
+          <p className="text-xs text-slate-600">Lançar pedidos direto para a cozinha</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('/painel/pdv')}
+          className="bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-4 text-left space-y-1.5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-orange-700 font-bold text-xs">
+            <Calculator className="w-4 h-4" />
+            <span>PDV e Caixa</span>
+          </div>
+          <p className="text-xs text-slate-600">
+            {cashRegister?.openRegister
+              ? `Saldo esperado: ${formatBRL(cashRegister.expectedCashCents)}`
+              : 'Abrir caixa e receber contas'}
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate('/painel/relatorios')}
+          className="bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-4 text-left space-y-1.5 cursor-pointer"
+        >
+          <div className="flex items-center gap-2 text-orange-700 font-bold text-xs">
+            <BarChart3 className="w-4 h-4" />
+            <span>Relatórios</span>
+          </div>
+          <p className="text-xs text-slate-600">Faturamento, ticket médio e produtos</p>
+        </button>
       </section>
 
       {/* Pedidos Recentes */}
@@ -216,26 +291,43 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </p>
         ) : (
           <div className="divide-y divide-slate-100">
-            {orders.slice(0, 5).map((ord) => (
-              <div key={ord.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900">
-                    Pedido #{ord.order_number} · {ord.customer_name}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {ord.fulfillment_type === 'delivery'
-                      ? `Entrega (${ord.neighborhood_name || ''})`
-                      : 'Retirada no local'}{' '}
-                    · {formatDateTimeBR(ord.created_at)}
-                  </p>
+            {orders.slice(0, 6).map((ord) => {
+              const statusMeta = ORDER_STATUS_META[ord.status] || ORDER_STATUS_META.novo;
+              const fulfillmentLabel = FULFILLMENT_LABELS[ord.fulfillment_type] || ord.fulfillment_type;
+              return (
+                <div key={ord.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900">
+                        Pedido #{ord.order_number} · {ord.customer_name}
+                      </p>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${statusMeta.tone}`}>
+                        {statusMeta.label}
+                      </span>
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                          ord.payment_status === 'paid'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {ord.payment_status === 'paid' ? 'Pago' : 'A receber'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {fulfillmentLabel}
+                      {ord.table_label ? ` (${ord.table_label})` : ''}
+                      {ord.neighborhood_name ? ` (${ord.neighborhood_name})` : ''} · {formatDateTimeBR(ord.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <span className="text-sm font-bold text-slate-900 font-mono tabular-nums">
+                      {formatBRL(ord.total_cents)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
-                  <span className="text-sm font-bold text-slate-900 font-mono tabular-nums">
-                    {formatBRL(ord.total_cents)}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -259,6 +351,12 @@ const DEMO_PHOTO_PRESETS = [
   { label: 'Smash Burger', url: '/images/dish_smash_burger.jpg' },
 ];
 
+interface DraftOptionRow {
+  id: string;
+  name: string;
+  priceText: string;
+}
+
 export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products, onRefresh }) => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [catSaving, setCatSaving] = useState(false);
@@ -271,6 +369,9 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
   const [priceText, setPriceText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
+  const [draftSizes, setDraftSizes] = useState<DraftOptionRow[]>([]);
+  const [draftAddons, setDraftAddons] = useState<DraftOptionRow[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [savingProduct, setSavingProduct] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -283,6 +384,8 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
     setPriceText('');
     setImageUrl('');
     setIsAvailable(true);
+    setDraftSizes([]);
+    setDraftAddons([]);
     setErrorMsg('');
     setModalOpen(true);
   };
@@ -295,8 +398,52 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
     setPriceText(formatCentsForInput(product.price_cents));
     setImageUrl(product.image_url);
     setIsAvailable(product.is_available !== false);
+    setDraftSizes(
+      (product.sizes || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        priceText: formatCentsForInput(s.priceCents),
+      }))
+    );
+    setDraftAddons(
+      (product.addons || []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        priceText: formatCentsForInput(a.priceCents),
+      }))
+    );
     setErrorMsg('');
     setModalOpen(true);
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    setErrorMsg('');
+    try {
+      const dataUrl = await readImageFileAsDataUrl(file, 720, 0.82);
+      setImageUrl(dataUrl);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Erro ao carregar a imagem.');
+    } finally {
+      setUploadingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const addDraftSize = () => {
+    setDraftSizes((prev) => [
+      ...prev,
+      { id: `size_${Date.now()}_${prev.length}`, name: '', priceText: priceText || '0,00' },
+    ]);
+  };
+
+  const addDraftAddon = () => {
+    setDraftAddons((prev) => [
+      ...prev,
+      { id: `addon_${Date.now()}_${prev.length}`, name: '', priceText: '4,00' },
+    ]);
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -337,6 +484,22 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
       return;
     }
 
+    const sizes: ProductSize[] = draftSizes
+      .map((row) => ({
+        id: row.id,
+        name: row.name.trim(),
+        priceCents: parseBRLInputToCents(row.priceText),
+      }))
+      .filter((s) => s.name.length > 0);
+
+    const addons: ProductAddon[] = draftAddons
+      .map((row) => ({
+        id: row.id,
+        name: row.name.trim(),
+        priceCents: parseBRLInputToCents(row.priceText),
+      }))
+      .filter((a) => a.name.length > 0);
+
     setSavingProduct(true);
     try {
       if (editingProduct) {
@@ -349,6 +512,8 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
             priceCents,
             imageUrl: imageUrl.trim(),
             isAvailable,
+            sizes,
+            addons,
           }),
         });
       } else {
@@ -361,6 +526,8 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
             priceCents,
             imageUrl: imageUrl.trim(),
             isAvailable,
+            sizes,
+            addons,
           }),
         });
       }
@@ -403,7 +570,7 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
         <div>
           <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900">Cardápio e produtos</h2>
           <p className="text-xs sm:text-sm text-slate-600">
-            Produtos ocultos ficam fora do cardápio público. Pedidos anteriores preservam os preços registrados.
+            Cadastre fotos, tamanhos/variações e adicionais. Produtos ocultos ficam fora do cardápio público.
           </p>
         </div>
         <button
@@ -481,6 +648,8 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
                 <div className="space-y-3">
                   {catProducts.map((product) => {
                     const visible = product.is_available !== false;
+                    const sizeCount = product.sizes?.length || 0;
+                    const addonCount = product.addons?.length || 0;
                     return (
                       <div
                         key={product.id}
@@ -510,12 +679,24 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
                               >
                                 {visible ? 'Disponível' : 'Oculto'}
                               </span>
+                              {sizeCount > 0 && (
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200">
+                                  {sizeCount} tamanho(s)
+                                </span>
+                              )}
+                              {addonCount > 0 && (
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                  {addonCount} adicional(is)
+                                </span>
+                              )}
                             </div>
                             {product.description && (
                               <p className="text-xs text-slate-600 mt-1 line-clamp-2">{product.description}</p>
                             )}
                             <p className="text-sm font-bold text-slate-900 font-mono tabular-nums mt-1">
-                              {formatBRL(product.price_cents)}
+                              {sizeCount > 0
+                                ? `A partir de ${formatBRL(Math.min(...product.sizes.map((s) => s.priceCents)))}`
+                                : formatBRL(product.price_cents)}
                             </p>
                           </div>
                         </div>
@@ -559,14 +740,14 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
         })}
       </div>
 
-      {/* Product Form Modal */}
+      {/* Product Form Modal (Sizes, Addons, Upload) */}
       {modalOpen && (
         <div
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <h3 className="font-display text-base font-bold text-slate-900">
                 {editingProduct ? 'Editar produto' : 'Novo produto'}
@@ -611,7 +792,7 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Preço (R$) *</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Preço base (R$) *</label>
                   <input
                     type="text"
                     required
@@ -626,26 +807,55 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Descrição</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ingredientes, tamanho ou observações..."
+                  placeholder="Ingredientes, porção ou observações..."
                   className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Foto opcional (URL ou imagem de exemplo)
+              {/* Foto: URL ou Upload local */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Foto do produto (enviar arquivo ou URL)
                 </label>
-                <input
-                  type="text"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  placeholder="/images/dish_pizza_margherita.jpg"
-                  className="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
-                />
-                <div className="flex flex-wrap gap-1.5 pt-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="/images/dish_pizza_margherita.jpg"
+                    className="flex-1 min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-600"
+                  />
+                  <label className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-800 inline-flex items-center justify-center gap-2 cursor-pointer shrink-0">
+                    <Upload className="w-4 h-4" />
+                    <span>{uploadingPhoto ? 'Processando...' : 'Enviar foto'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {imageUrl && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <img
+                      src={imageUrl}
+                      alt="Prévia"
+                      className="w-14 h-14 rounded-xl object-cover border border-slate-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="px-2.5 py-1 text-xs rounded-lg bg-rose-50 text-rose-700 cursor-pointer"
+                    >
+                      Remover foto
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1.5">
                   {DEMO_PHOTO_PRESETS.map((preset) => (
                     <button
                       key={preset.url}
@@ -656,16 +866,113 @@ export const MenuTab: React.FC<MenuTabProps> = ({ storeId, categories, products,
                       {preset.label}
                     </button>
                   ))}
-                  {imageUrl && (
+                </div>
+              </div>
+
+              {/* Tamanhos / Variações */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">Tamanhos / Variações (opcional)</p>
+                    <p className="text-[11px] text-slate-500">
+                      Quando houver tamanhos, o cliente escolhe um e o preço dele vale como valor base do item.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addDraftSize}
+                    className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer shrink-0"
+                  >
+                    + Tamanho
+                  </button>
+                </div>
+
+                {draftSizes.map((row, idx) => (
+                  <div key={row.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => {
+                        const copy = [...draftSizes];
+                        copy[idx] = { ...row, name: e.target.value };
+                        setDraftSizes(copy);
+                      }}
+                      placeholder="Ex: Média (6 fatias)"
+                      className="flex-1 min-h-[40px] px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={row.priceText}
+                      onChange={(e) => {
+                        const copy = [...draftSizes];
+                        copy[idx] = { ...row, priceText: e.target.value };
+                        setDraftSizes(copy);
+                      }}
+                      placeholder="42,00"
+                      className="w-24 min-h-[40px] px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 bg-white"
+                    />
                     <button
                       type="button"
-                      onClick={() => setImageUrl('')}
-                      className="px-2.5 py-1 text-xs rounded-lg bg-rose-50 text-rose-700 cursor-pointer"
+                      onClick={() => setDraftSizes((prev) => prev.filter((_, i) => i !== idx))}
+                      className="min-w-[36px] min-h-[36px] rounded-lg text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
                     >
-                      Sem foto
+                      <Trash2 className="w-4 h-4" />
                     </button>
-                  )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Adicionais */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">Adicionais (opcional)</p>
+                    <p className="text-[11px] text-slate-500">
+                      Ex.: Borda recheada, bacon extra, queijo adicional (somados ao preço).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addDraftAddon}
+                    className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-800 hover:bg-slate-100 cursor-pointer shrink-0"
+                  >
+                    + Adicional
+                  </button>
                 </div>
+
+                {draftAddons.map((row, idx) => (
+                  <div key={row.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => {
+                        const copy = [...draftAddons];
+                        copy[idx] = { ...row, name: e.target.value };
+                        setDraftAddons(copy);
+                      }}
+                      placeholder="Ex: Bacon crocante"
+                      className="flex-1 min-h-[40px] px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={row.priceText}
+                      onChange={(e) => {
+                        const copy = [...draftAddons];
+                        copy[idx] = { ...row, priceText: e.target.value };
+                        setDraftAddons(copy);
+                      }}
+                      placeholder="5,00"
+                      className="w-24 min-h-[40px] px-2.5 py-1.5 text-xs font-mono rounded-lg border border-slate-300 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDraftAddons((prev) => prev.filter((_, i) => i !== idx))}
+                      className="min-w-[36px] min-h-[36px] rounded-lg text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
 
               <label className="flex items-center gap-2.5 text-sm text-slate-700 min-h-[40px] cursor-pointer">

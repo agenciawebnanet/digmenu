@@ -6,11 +6,16 @@ import { AuthPages } from './components/AuthPages';
 import { PublicMenuPage } from './components/PublicMenuPage';
 import { DashboardShell, type DashboardRoute } from './components/dashboard/DashboardShell';
 import { LegalPages } from './components/LegalPages';
+import { AdminPage } from './components/AdminPage';
 
 const DASHBOARD_ROUTES: DashboardRoute[] = [
   '/painel',
-  '/painel/cardapio',
+  '/painel/cozinha',
+  '/painel/garcom',
+  '/painel/pdv',
   '/painel/pedidos',
+  '/painel/cardapio',
+  '/painel/relatorios',
   '/painel/configuracoes',
   '/painel/assinatura',
 ];
@@ -32,7 +37,7 @@ export default function App() {
   const navigate = useCallback((to: string) => {
     const cleanTarget = to.split('?')[0];
     const normalized = normalizePathname(cleanTarget);
-    if (window.location.pathname !== to) {
+    if (window.location.pathname + window.location.search !== to) {
       window.history.pushState({}, '', to);
     }
     setPathname(normalized);
@@ -78,7 +83,6 @@ export default function App() {
   const handleAuthSuccess = (authedUser: AuthUser, userStores: StoreSummary[]) => {
     setUser(authedUser);
     setStores(userStores);
-    // Refresh demo stores list as well
     apiRequest<{ stores: DemoStoreItem[] }>('/api/public/demo-stores')
       .then((d) => setDemoStores(d.stores))
       .catch(() => {});
@@ -97,7 +101,7 @@ export default function App() {
   // Route matching
   if (pathname.startsWith('/m/')) {
     const slug = pathname.slice(3).split('/')[0];
-    return <PublicMenuPage slug={slug} onNavigate={navigate} />;
+    return <PublicMenuPage slug={slug} config={config} onNavigate={navigate} />;
   }
 
   if (pathname === '/termos' || pathname === '/privacidade' || pathname === '/suporte') {
@@ -109,6 +113,9 @@ export default function App() {
     return (
       <AuthPages
         mode="register"
+        config={config}
+        currentUser={user}
+        currentStores={stores}
         onNavigate={navigate}
         onAuthSuccess={handleAuthSuccess}
       />
@@ -119,10 +126,37 @@ export default function App() {
     return (
       <AuthPages
         mode="login"
+        config={config}
+        currentUser={user}
+        currentStores={stores}
         onNavigate={navigate}
         onAuthSuccess={handleAuthSuccess}
       />
     );
+  }
+
+  if (pathname === '/recuperar-senha') {
+    return (
+      <AuthPages
+        mode="reset"
+        config={config}
+        currentUser={user}
+        currentStores={stores}
+        onNavigate={navigate}
+        onAuthSuccess={handleAuthSuccess}
+      />
+    );
+  }
+
+  if (pathname === '/admin') {
+    if (!authChecked) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-600">
+          Verificando sessão...
+        </div>
+      );
+    }
+    return <AdminPage user={user} onNavigate={navigate} />;
   }
 
   if (DASHBOARD_ROUTES.includes(pathname as DashboardRoute)) {
@@ -133,10 +167,13 @@ export default function App() {
         </div>
       );
     }
-    if (!user) {
+    if (!user || stores.length === 0) {
       return (
         <AuthPages
-          mode="login"
+          mode={user ? 'register' : 'login'}
+          config={config}
+          currentUser={user}
+          currentStores={stores}
           onNavigate={navigate}
           onAuthSuccess={handleAuthSuccess}
         />
